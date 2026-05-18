@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiple Image to A4 PDF Converter</title>
+    <!-- Include jsPDF library from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #f4f6f9;
+            color: #333;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        select, input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        #convertBtn {
+            background-color: #3498db;
+            color: white;
+        }
+        #convertBtn:hover {
+            background-color: #2980b9;
+        }
+        #saveBtn {
+            background-color: #2ecc71;
+            color: white;
+            display: none; /* Hidden until PDF is built */
+        }
+        #saveBtn:hover {
+            background-color: #27ae60;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 15px;
+            text-align: center;
+            font-weight: 500;
+        }
+        .success { color: #27ae60; }
+        .error { color: #c0392b; }
+        .info { color: #f39c12; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Image to A4 PDF Converter</h2>
+    
+    <div class="form-group">
+        <!-- 'multiple' attribute allows selecting more than one image -->
+        <label for="imageInput">Select Multiple Images:</label>
+        <input type="file" id="imageInput" accept="image/*" multiple>
+    </div>
+
+    <div class="form-group">
+        <label for="sizeLimit">Target PDF Max Size:</label>
+        <select id="sizeLimit">
+            <option value="1">Less than 1 MB</option>
+            <option value="2" selected>Less than 2 MB</option>
+            <option value="5">Less than 5 MB</option>
+        </select>
+    </div>
+
+    <div class="btn-group">
+        <button id="convertBtn">Convert Images</button>
+        <button id="saveBtn">📥 Save PDF to Device</button>
+    </div>
+    
+    <div id="status"></div>
+</div>
+
+<script>
+    const { jsPDF } = window.jspdf;
+    let generatedPdfInstance = null; 
+
+    document.getElementById('convertBtn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('imageInput');
+        const sizeLimitMb = parseFloat(document.getElementById('sizeLimit').value);
+        const saveBtn = document.getElementById('saveBtn');
+        const convertBtn = document.getElementById('convertBtn');
+
+        if (fileInput.files.length === 0) {
+            updateStatus('Please select at least one image.', 'error');
+            return;
+        }
+
+        convertBtn.disabled = true;
+        saveBtn.style.display = 'none'; 
+        updateStatus('Fitting images to A4 and compressing...', 'info');
+
+        try {
+            const files = Array.from(fileInput.files);
+            
+            // Force document format explicitly to standard A4 portrait ('a4')
+            // jsPDF handles A4 dimensions in millimeters: 210mm x 297mm
+            let pdf = new jsPDF({
+                orientation: 'p',
+                unit: 'mm',
+                format: 'a4'
+            });
+            
+            const targetMaxBytes = sizeLimitMb * 1024 * 1024 * 0.95; 
+            const bytesPerImageBudget = targetMaxBytes / files.length;
+
+            for (let i = 0; i < files.length; i++) {
+                // Add a new A4 page for subsequent images
+                if (i > 0) pdf.addPage('a4', 'p');
+                
+                const file = files[i];
+                const img = await loadImage(file);
+                const compressedDataUrl = compressImage(img, bytesPerImageBudget);
+                
+                // Exact A4 dimensions in mm
+                const a4Width = 210;
+                const a4Height = 297;
+                
+                // Calculate scale to completely fit full image inside A4 bounds (Letterboxing)
+                const imgRatio = img.width / img.height;
+                const a4Ratio = a4Width / a4Height;
+                
+                let printWidth = a4Width;
+                let printHeight = a4Height;
+
+                if (imgRatio > a4Ratio) {
+                    // Image is wider than A4 ratio -> fit to width, scale down height
+                    printHeight = a4Width / imgRatio;
+                } else {
+                    // Image is taller than A4 ratio -> fit to height, scale down width
+                    printWidth = a4Height * imgRatio;
+                }
+
+                // Mathematical centering offsets on the A4 page
+                const xOffset = (a4Width - printWidth) / 2;
+                const yOffset = (a4Height - printHeight) / 2;
+
+                pdf.addImage(compressedDataUrl, 'JPEG', xOffset, yOffset, printWidth, printHeight);
+            }
+
+            const pdfBlob = pdf.output('blob');
+            const finalSizeMb = (pdfBlob.size / (1024 * 1024)).toFixed(2);
+
+            if (pdfBlob.size > (sizeLimitMb * 1024 * 1024)) {
+                updateStatus(`Generated PDF (${finalSizeMb} MB) slightly exceeds limit. Try fewer images or a higher limit.`, 'error');
+            } else {
+                generatedPdfInstance = pdf; 
+                saveBtn.style.display = 'block';
+                updateStatus(`Success! ${files.length} images adjusted to A4 format (Size: ${finalSizeMb} MB).`, 'success');
+            }
+
+        } catch (error) {
+            console.error(error);
+            updateStatus('An error occurred during conversion.', 'error');
+        } finally {
+            convertBtn.disabled = false;
+        }
+    });
+
+    document.getElementById('saveBtn').addEventListener('click', () => {
+        if (generatedPdfInstance) {
+            generatedPdfInstance.save('a4_converted_images.pdf');
+        }
+    });
+
+    function loadImage(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = e.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function compressImage(img, maxBytesBudget) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+
+        let quality = 0.92;
+        let dataUrl = canvas.toDataURL('image/jpeg', quality);
+        
+        while ((dataUrl.length * 0.75) > maxBytesBudget && quality > 0.1) {
+            quality -= 0.1;
+            dataUrl = canvas.toDataURL('image/jpeg', quality);
+        }
+        return dataUrl;
+    }
+
+    function updateStatus(message, className) {
+        const statusDiv = document.getElementById('status');
+        statusDiv.textContent = message;
+        statusDiv.className = className;
+    }
+</script>
+
+</body>
+</html>
