@@ -3,142 +3,290 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multiple Image to A4 PDF Converter</title>
-    <!-- Include jsPDF library from CDN -->
+    <title>File Converter Dashboard</title>
+    <!-- Dependencies: jsPDF, PDF.js, and JSZip -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
     <style>
+        :root {
+            --primary-color: #3498db;
+            --primary-hover: #2980b9;
+            --success-color: #2ecc71;
+            --success-hover: #27ae60;
+            --bg-color: #f4f6f9;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* Dashboard Container styling */
+        .main-content {
+            flex: 1;
             max-width: 600px;
-            margin: 40px auto;
-            padding: 20px;
-            background-color: #f4f6f9;
-            color: #333;
+            width: 100%;
+            margin: 0 auto;
+            padding: 30px 20px 100px 20px; /* Extra bottom padding so content doesn't hide behind fixed nav */
+            box-sizing: border-box;
         }
-        .container {
-            background: white;
+
+        .card {
+            background: var(--card-bg);
             padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            display: none; /* Controlled via JS switching */
         }
+
+        .card.active {
+            display: block;
+        }
+
         h2 {
             margin-top: 0;
             color: #2c3e50;
             text-align: center;
+            margin-bottom: 25px;
         }
+
         .form-group {
             margin-bottom: 20px;
         }
+
         label {
             display: block;
             margin-bottom: 8px;
             font-weight: 600;
         }
+
         select, input[type="file"] {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
+            padding: 12px;
+            border: 1px solid #cccccc;
+            border-radius: 6px;
             box-sizing: border-box;
+            background: #fff;
         }
+
         .btn-group {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 12px;
+            margin-top: 25px;
         }
+
         button {
             width: 100%;
-            padding: 12px;
+            padding: 14px;
             border: none;
-            border-radius: 4px;
+            border-radius: 6px;
             font-size: 16px;
             cursor: pointer;
             font-weight: bold;
-            transition: background 0.2s;
+            transition: all 0.2s ease;
         }
-        #convertBtn {
-            background-color: #3498db;
+
+        .action-btn {
+            background-color: var(--primary-color);
             color: white;
         }
-        #convertBtn:hover {
-            background-color: #2980b9;
+
+        .action-btn:hover {
+            background-color: var(--primary-hover);
         }
-        #saveBtn {
-            background-color: #2ecc71;
+
+        .save-btn {
+            background-color: var(--success-color);
             color: white;
-            display: none; /* Hidden until PDF is built */
+            display: none; /* Hidden until processing success */
         }
-        #saveBtn:hover {
-            background-color: #27ae60;
+
+        .save-btn:hover {
+            background-color: var(--success-hover);
         }
+
         button:disabled {
-            background-color: #bdc3c7;
+            background-color: #bdc3c7 !important;
             cursor: not-allowed;
         }
-        #status {
-            margin-top: 15px;
+
+        /* Status message indicator styling */
+        .status-box {
+            margin-top: 20px;
             text-align: center;
             font-weight: 500;
+            min-height: 24px;
         }
-        .success { color: #27ae60; }
+        .success { color: var(--success-color); }
         .error { color: #c0392b; }
         .info { color: #f39c12; }
+
+        /* FIXED BOTTOM NAVIGATION BAR */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 70px;
+            background: #ffffff;
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.06);
+            display: flex;
+            z-index: 1000;
+        }
+
+        .nav-tab {
+            flex: 1;
+            background: none;
+            border: none;
+            border-radius: 0;
+            padding: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #7f8c8d;
+            font-size: 14px;
+            font-weight: 600;
+            gap: 4px;
+        }
+
+        .nav-tab:hover {
+            background: #fdfdfd;
+        }
+
+        .nav-tab.active {
+            color: var(--primary-color);
+            background: #f0f7fc;
+            border-top: 3px solid var(--primary-color);
+        }
+
+        .nav-icon {
+            font-size: 20px;
+        }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>Image to A4 PDF Converter</h2>
-    
-    <div class="form-group">
-        <label for="imageInput">Select Multiple Images:</label>
-        <input type="file" id="imageInput" accept="image/*" multiple>
+    <div class="main-content">
+        <!-- 1. IMAGE TO PDF CARD PANEL -->
+        <div id="imgToPdfPanel" class="card active">
+            <h2>Image to A4 PDF</h2>
+            <div class="form-group">
+                <label for="imgInput">Select Multiple Images:</label>
+                <input type="file" id="imgInput" accept="image/*" multiple>
+            </div>
+            <div class="form-group">
+                <label for="imgSizeLimit">Target PDF Max Size:</label>
+                <select id="imgSizeLimit">
+                    <option value="1">Less than 1 MB</option>
+                    <option value="2" selected>Less than 2 MB</option>
+                    <option value="5">Less than 5 MB</option>
+                </select>
+            </div>
+            <div class="btn-group">
+                <button id="imgConvertBtn" class="action-btn">Convert Images to PDF</button>
+                <button id="imgSaveBtn" class="save-btn">📥 Save PDF to Device</button>
+            </div>
+            <div id="imgStatus" class="status-box"></div>
+        </div>
+
+        <!-- 2. PDF TO IMAGE CARD PANEL -->
+        <div id="pdfToImgPanel" class="card">
+            <h2>PDF to Image</h2>
+            <div class="form-group">
+                <label for="pdfInput">Select PDF File:</label>
+                <input type="file" id="pdfInput" accept=".pdf">
+            </div>
+            <div class="form-group">
+                <label for="pdfSizeLimit">Target Max Size (Package Limit):</label>
+                <select id="pdfSizeLimit">
+                    <option value="1">Less than 1 MB</option>
+                    <option value="2" selected>Less than 2 MB</option>
+                    <option value="5">Less than 5 MB</option>
+                </select>
+            </div>
+            <div class="btn-group">
+                <button id="pdfConvertBtn" class="action-btn">Convert PDF to Images</button>
+                <button id="pdfSaveBtn" class="save-btn">📥 Save Images to Device</button>
+            </div>
+            <div id="pdfStatus" class="status-box"></div>
+        </div>
     </div>
 
-    <div class="form-group">
-        <label for="sizeLimit">Target PDF Max Size:</label>
-        <select id="sizeLimit">
-            <option value="1">Less than 1 MB</option>
-            <option value="2" selected>Less than 2 MB</option>
-            <option value="5">Less than 5 MB</option>
-        </select>
-    </div>
-
-    <div class="btn-group">
-        <button id="convertBtn">Convert Images</button>
-        <button id="saveBtn">📥 Save PDF to Device</button>
-    </div>
-    
-    <div id="status"></div>
-</div>
+    <!-- FIXED BOTTOM TABS CONTAINER -->
+    <nav class="bottom-nav">
+        <button id="tabImgToPdf" class="nav-tab active">
+            <span class="nav-icon">🖼️</span>
+            <span>Image to PDF</span>
+        </button>
+        <button id="tabPdfToImg" class="nav-tab">
+            <span class="nav-icon">📄</span>
+            <span>PDF to Image</span>
+        </button>
+    </nav>
 
 <script>
+    // Config global worker asset link for PDF.js parsing
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
     const { jsPDF } = window.jspdf;
-    let generatedPdfInstance = null; 
 
-    document.getElementById('convertBtn').addEventListener('click', async () => {
-        const fileInput = document.getElementById('imageInput');
-        const sizeLimitMb = parseFloat(document.getElementById('sizeLimit').value);
-        const saveBtn = document.getElementById('saveBtn');
-        const convertBtn = document.getElementById('convertBtn');
+    // App state holders
+    let generatedPdfInstance = null; 
+    let extractedImagesArray = [];
+    let isMultiPagePdf = false;
+
+    // --- TAB NAV SWITCHING CORE LOGIC ---
+    const tabImgToPdf = document.getElementById('tabImgToPdf');
+    const tabPdfToImg = document.getElementById('tabPdfToImg');
+    const imgToPdfPanel = document.getElementById('imgToPdfPanel');
+    const pdfToImgPanel = document.getElementById('pdfToImgPanel');
+
+    tabImgToPdf.addEventListener('click', () => {
+        tabImgToPdf.classList.add('active');
+        tabPdfToImg.classList.remove('active');
+        imgToPdfPanel.classList.add('active');
+        pdfToImgPanel.classList.remove('active');
+    });
+
+    tabPdfToImg.addEventListener('click', () => {
+        tabPdfToImg.classList.add('active');
+        tabImgToPdf.classList.remove('active');
+        pdfToImgPanel.classList.add('active');
+        imgToPdfPanel.classList.remove('active');
+    });
+
+
+    // --- FEATURE A: IMAGE TO PDF ENGINE ---
+    document.getElementById('imgConvertBtn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('imgInput');
+        const sizeLimitMb = parseFloat(document.getElementById('imgSizeLimit').value);
+        const saveBtn = document.getElementById('imgSaveBtn');
+        const convertBtn = document.getElementById('imgConvertBtn');
 
         if (fileInput.files.length === 0) {
-            updateStatus('Please select at least one image.', 'error');
+            updateStatus('imgStatus', 'Please select at least one image.', 'error');
             return;
         }
 
         convertBtn.disabled = true;
         saveBtn.style.display = 'none'; 
-        updateStatus('Fitting images to A4 and compressing...', 'info');
+        updateStatus('imgStatus', 'Fitting images to A4 format and compressing...', 'info');
 
         try {
             const files = Array.from(fileInput.files);
-            
-            let pdf = new jsPDF({
-                orientation: 'p',
-                unit: 'mm',
-                format: 'a4'
-            });
+            let pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
             
             const targetMaxBytes = sizeLimitMb * 1024 * 1024 * 0.95; 
             const bytesPerImageBudget = targetMaxBytes / files.length;
@@ -152,7 +300,6 @@
                 
                 const a4Width = 210;
                 const a4Height = 297;
-                
                 const imgRatio = img.width / img.height;
                 const a4Ratio = a4Width / a4Height;
                 
@@ -175,48 +322,128 @@
             const finalSizeMb = (pdfBlob.size / (1024 * 1024)).toFixed(2);
 
             if (pdfBlob.size > (sizeLimitMb * 1024 * 1024)) {
-                updateStatus(`Generated PDF (${finalSizeMb} MB) slightly exceeds limit. Try fewer images or a higher limit.`, 'error');
+                updateStatus('imgStatus', `Generated PDF (${finalSizeMb} MB) slightly exceeds limit. Try fewer images.`, 'error');
             } else {
                 generatedPdfInstance = pdf; 
                 saveBtn.style.display = 'block';
-                updateStatus(`Success! ${files.length} images adjusted to A4 format (Size: ${finalSizeMb} MB).`, 'success');
+                updateStatus('imgStatus', `Success! ${files.length} images adjusted to A4 format (Size: ${finalSizeMb} MB).`, 'success');
             }
-
         } catch (error) {
             console.error(error);
-            updateStatus('An error occurred during conversion.', 'error');
+            updateStatus('imgStatus', 'An error occurred during conversion.', 'error');
         } finally {
             convertBtn.disabled = false;
         }
     });
 
-    // Handle "Save As Name" feature
-    document.getElementById('saveBtn').addEventListener('click', () => {
-        if (generatedPdfInstance) {
-            // Ask user for a custom filename
-            let fileName = prompt("Enter a name for your PDF file:", "my_converted_images");
-            
-            // If user clicks cancel, do nothing
-            if (fileName === null) return; 
-            
-            // Trim whitespace
-            fileName = fileName.trim();
-            
-            // Fallback if they clear the text and click OK
-            if (fileName === "") {
-                fileName = "converted_images";
+    document.getElementById('imgSaveBtn').addEventListener('click', () => {
+        if (!generatedPdfInstance) return;
+        let fileName = prompt("Enter a name for your PDF file:", "my_converted_images");
+        if (fileName === null) return; 
+        fileName = fileName.trim();
+        if (fileName === "") fileName = "converted_images";
+        if (!fileName.toLowerCase().endsWith(".pdf")) fileName += ".pdf";
+        generatedPdfInstance.save(fileName);
+    });
+
+
+    // --- FEATURE B: PDF TO IMAGE ENGINE ---
+    document.getElementById('pdfConvertBtn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('pdfInput');
+        const sizeLimitMb = parseFloat(document.getElementById('pdfSizeLimit').value);
+        const convertBtn = document.getElementById('pdfConvertBtn');
+        const saveBtn = document.getElementById('pdfSaveBtn');
+
+        if (fileInput.files.length === 0) {
+            updateStatus('pdfStatus', 'Please select a PDF file first.', 'error');
+            return;
+        }
+
+        convertBtn.disabled = true;
+        saveBtn.style.display = 'none';
+        extractedImagesArray = []; 
+        updateStatus('pdfStatus', 'Reading PDF document structure...', 'info');
+
+        try {
+            const file = fileInput.files[0];
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const totalPages = pdf.numPages;
+            isMultiPagePdf = totalPages > 1;
+
+            const targetMaxBytes = sizeLimitMb * 1024 * 1024 * 0.95;
+            const budgetPerPage = isMultiPagePdf ? (targetMaxBytes / totalPages) : targetMaxBytes;
+
+            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                updateStatus('pdfStatus', `Rendering sheet ${pageNum} of ${totalPages}...`, 'info');
+                
+                const page = await pdf.getPage(pageNum);
+                const viewport = page.getViewport({ scale: 2.0 });
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+
+                await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+
+                let quality = 0.92;
+                let dataUrl = canvas.toDataURL('image/jpeg', quality);
+                
+                while ((dataUrl.length * 0.75) > budgetPerPage && quality > 0.1) {
+                    quality -= 0.1;
+                    dataUrl = canvas.toDataURL('image/jpeg', quality);
+                }
+                extractedImagesArray.push(dataUrl);
             }
-            
-            // Automatically append .pdf extension if they didn't type it
-            if (!fileName.toLowerCase().endsWith(".pdf")) {
-                fileName += ".pdf";
-            }
-            
-            // Trigger download with custom filename
-            generatedPdfInstance.save(fileName);
+
+            saveBtn.style.display = 'block';
+            updateStatus('pdfStatus', `Success! Ready to export ${totalPages} page(s) matching your size constraints.`, 'success');
+        } catch (error) {
+            console.error(error);
+            updateStatus('pdfStatus', 'An error occurred during PDF parsing.', 'error');
+        } finally {
+            convertBtn.disabled = false;
         }
     });
 
+    document.getElementById('pdfSaveBtn').addEventListener('click', async () => {
+        if (extractedImagesArray.length === 0) return;
+
+        const defaultName = isMultiPagePdf ? "extracted_pages_package" : "extracted_page";
+        let fileName = prompt("Enter a name for your file/package:", defaultName);
+        if (fileName === null) return;
+        fileName = fileName.trim();
+        if (fileName === "") fileName = defaultName;
+
+        if (!isMultiPagePdf) {
+            if (!fileName.toLowerCase().endsWith(".jpg") && !fileName.toLowerCase().endsWith(".jpeg")) {
+                fileName += ".jpg";
+            }
+            const link = document.createElement('a');
+            link.href = extractedImagesArray[0];
+            link.download = fileName;
+            link.click();
+        } else {
+            updateStatus('pdfStatus', 'Bundling pages into a ZIP file...', 'info');
+            const zip = new JSZip();
+            extractedImagesArray.forEach((dataUrl, index) => {
+                const base64Data = dataUrl.split(',')[1];
+                zip.file(`page_${index + 1}.jpg`, base64Data, { base64: true });
+            });
+
+            if (!fileName.toLowerCase().endsWith(".zip")) fileName += ".zip";
+
+            const content = await zip.generateAsync({ type: "blob" });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(content);
+            link.download = fileName;
+            link.click();
+            updateStatus('pdfStatus', 'ZIP download started!', 'success');
+        }
+    });
+
+
+    // --- GENERAL CONVERSION HELPER UTILITIES ---
     function loadImage(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -248,10 +475,10 @@
         return dataUrl;
     }
 
-    function updateStatus(message, className) {
-        const statusDiv = document.getElementById('status');
+    function updateStatus(targetId, message, className) {
+        const statusDiv = document.getElementById(targetId);
         statusDiv.textContent = message;
-        statusDiv.className = className;
+        statusDiv.className = `status-box ${className}`;
     }
 </script>
 
