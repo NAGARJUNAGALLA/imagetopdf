@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>File Converter Dashboard</title>
-    <!-- Dependencies: jsPDF, PDF.js, and JSZip -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -31,13 +30,12 @@
             min-height: 100vh;
         }
 
-        /* Dashboard Container styling */
         .main-content {
             flex: 1;
             max-width: 600px;
             width: 100%;
             margin: 0 auto;
-            padding: 30px 20px 100px 20px; /* Extra bottom padding so content doesn't hide behind fixed nav */
+            padding: 30px 20px 100px 20px; 
             box-sizing: border-box;
         }
 
@@ -46,7 +44,7 @@
             padding: 30px;
             border-radius: 12px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-            display: none; /* Controlled via JS switching */
+            display: none; 
         }
 
         .card.active {
@@ -77,6 +75,7 @@
             border-radius: 6px;
             box-sizing: border-box;
             background: #fff;
+            font-size: 14px;
         }
 
         .btn-group {
@@ -109,7 +108,7 @@
         .save-btn {
             background-color: var(--success-color);
             color: white;
-            display: none; /* Hidden until processing success */
+            display: none; 
         }
 
         .save-btn:hover {
@@ -121,7 +120,6 @@
             cursor: not-allowed;
         }
 
-        /* Status message indicator styling */
         .status-box {
             margin-top: 20px;
             text-align: center;
@@ -180,8 +178,7 @@
 <body>
 
     <div class="main-content">
-        <!-- 1. IMAGE TO PDF CARD PANEL -->
-        <div id="imgToPdfPanel" class="card active">
+        <div id="imgPanel" class="card active">
             <h2>Image to A4 PDF</h2>
             <div class="form-group">
                 <label for="imgInput">Select Multiple Images:</label>
@@ -190,6 +187,7 @@
             <div class="form-group">
                 <label for="imgSizeLimit">Target PDF Max Size:</label>
                 <select id="imgSizeLimit">
+                    <option value="actual">Actual Size / No Limit (High Quality)</option>
                     <option value="1">Less than 1 MB</option>
                     <option value="2" selected>Less than 2 MB</option>
                     <option value="5">Less than 5 MB</option>
@@ -202,16 +200,16 @@
             <div id="imgStatus" class="status-box"></div>
         </div>
 
-        <!-- 2. PDF TO IMAGE CARD PANEL -->
-        <div id="pdfToImgPanel" class="card">
-            <h2>PDF to Image</h2>
+        <div id="pdfPanel" class="card">
+            <h2>PDF to Image Extractor</h2>
             <div class="form-group">
                 <label for="pdfInput">Select PDF File:</label>
                 <input type="file" id="pdfInput" accept=".pdf">
             </div>
             <div class="form-group">
-                <label for="pdfSizeLimit">Target Max Size (Package Limit):</label>
+                <label for="pdfSizeLimit">Target Max Size (Package/Image Constraint):</label>
                 <select id="pdfSizeLimit">
+                    <option value="actual">Actual Size / No Limit (High Quality)</option>
                     <option value="1">Less than 1 MB</option>
                     <option value="2" selected>Less than 2 MB</option>
                     <option value="5">Less than 5 MB</option>
@@ -225,225 +223,52 @@
         </div>
     </div>
 
-    <!-- FIXED BOTTOM TABS CONTAINER -->
     <nav class="bottom-nav">
-        <button id="tabImgToPdf" class="nav-tab active">
+        <button id="tabImg" class="nav-tab active">
             <span class="nav-icon">🖼️</span>
             <span>Image to PDF</span>
         </button>
-        <button id="tabPdfToImg" class="nav-tab">
+        <button id="tabPdf" class="nav-tab">
             <span class="nav-icon">📄</span>
             <span>PDF to Image</span>
         </button>
     </nav>
 
 <script>
-    // Config global worker asset link for PDF.js parsing
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
     const { jsPDF } = window.jspdf;
 
-    // App state holders
-    let generatedPdfInstance = null; 
-    let extractedImagesArray = [];
-    let isMultiPagePdf = false;
+    // Local data stores
+    let readyPdfInstance = null;
+    let readyImagesArray = []; 
+    let isMultiPageOutput = false;
 
-    // --- TAB NAV SWITCHING CORE LOGIC ---
-    const tabImgToPdf = document.getElementById('tabImgToPdf');
-    const tabPdfToImg = document.getElementById('tabPdfToImg');
-    const imgToPdfPanel = document.getElementById('imgToPdfPanel');
-    const pdfToImgPanel = document.getElementById('pdfToImgPanel');
+    // --- TAB SWITCHING INTERFACE MANAGEMENT ---
+    const tabImg = document.getElementById('tabImg');
+    const tabPdf = document.getElementById('tabPdf');
+    const imgPanel = document.getElementById('imgPanel');
+    const pdfPanel = document.getElementById('pdfPanel');
 
-    tabImgToPdf.addEventListener('click', () => {
-        tabImgToPdf.classList.add('active');
-        tabPdfToImg.classList.remove('active');
-        imgToPdfPanel.classList.add('active');
-        pdfToImgPanel.classList.remove('active');
-    });
+    function switchTab(activeTab, inactiveTab, activePanel, inactivePanel) {
+        activeTab.classList.add('active');
+        inactiveTab.classList.remove('active');
+        activePanel.classList.add('active');
+        inactivePanel.classList.remove('active');
+        resetDashboardState();
+    }
+    tabImg.addEventListener('click', () => switchTab(tabImg, tabPdf, imgPanel, pdfPanel));
+    tabPdf.addEventListener('click', () => switchTab(tabPdf, tabImg, pdfPanel, imgPanel));
 
-    tabPdfToImg.addEventListener('click', () => {
-        tabPdfToImg.classList.add('active');
-        tabImgToPdf.classList.remove('active');
-        pdfToImgPanel.classList.add('active');
-        imgToPdfPanel.classList.remove('active');
-    });
+    function resetDashboardState() {
+        readyPdfInstance = null;
+        readyImagesArray = [];
+        document.getElementById('imgSaveBtn').style.display = 'none';
+        document.getElementById('pdfSaveBtn').style.display = 'none';
+        document.getElementById('imgStatus').textContent = '';
+        document.getElementById('pdfStatus').textContent = '';
+    }
 
-
-    // --- FEATURE A: IMAGE TO PDF ENGINE ---
-    document.getElementById('imgConvertBtn').addEventListener('click', async () => {
-        const fileInput = document.getElementById('imgInput');
-        const sizeLimitMb = parseFloat(document.getElementById('imgSizeLimit').value);
-        const saveBtn = document.getElementById('imgSaveBtn');
-        const convertBtn = document.getElementById('imgConvertBtn');
-
-        if (fileInput.files.length === 0) {
-            updateStatus('imgStatus', 'Please select at least one image.', 'error');
-            return;
-        }
-
-        convertBtn.disabled = true;
-        saveBtn.style.display = 'none'; 
-        updateStatus('imgStatus', 'Fitting images to A4 format and compressing...', 'info');
-
-        try {
-            const files = Array.from(fileInput.files);
-            let pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-            
-            const targetMaxBytes = sizeLimitMb * 1024 * 1024 * 0.95; 
-            const bytesPerImageBudget = targetMaxBytes / files.length;
-
-            for (let i = 0; i < files.length; i++) {
-                if (i > 0) pdf.addPage('a4', 'p');
-                
-                const file = files[i];
-                const img = await loadImage(file);
-                const compressedDataUrl = compressImage(img, bytesPerImageBudget);
-                
-                const a4Width = 210;
-                const a4Height = 297;
-                const imgRatio = img.width / img.height;
-                const a4Ratio = a4Width / a4Height;
-                
-                let printWidth = a4Width;
-                let printHeight = a4Height;
-
-                if (imgRatio > a4Ratio) {
-                    printHeight = a4Width / imgRatio;
-                } else {
-                    printWidth = a4Height * imgRatio;
-                }
-
-                const xOffset = (a4Width - printWidth) / 2;
-                const yOffset = (a4Height - printHeight) / 2;
-
-                pdf.addImage(compressedDataUrl, 'JPEG', xOffset, yOffset, printWidth, printHeight);
-            }
-
-            const pdfBlob = pdf.output('blob');
-            const finalSizeMb = (pdfBlob.size / (1024 * 1024)).toFixed(2);
-
-            if (pdfBlob.size > (sizeLimitMb * 1024 * 1024)) {
-                updateStatus('imgStatus', `Generated PDF (${finalSizeMb} MB) slightly exceeds limit. Try fewer images.`, 'error');
-            } else {
-                generatedPdfInstance = pdf; 
-                saveBtn.style.display = 'block';
-                updateStatus('imgStatus', `Success! ${files.length} images adjusted to A4 format (Size: ${finalSizeMb} MB).`, 'success');
-            }
-        } catch (error) {
-            console.error(error);
-            updateStatus('imgStatus', 'An error occurred during conversion.', 'error');
-        } finally {
-            convertBtn.disabled = false;
-        }
-    });
-
-    document.getElementById('imgSaveBtn').addEventListener('click', () => {
-        if (!generatedPdfInstance) return;
-        let fileName = prompt("Enter a name for your PDF file:", "my_converted_images");
-        if (fileName === null) return; 
-        fileName = fileName.trim();
-        if (fileName === "") fileName = "converted_images";
-        if (!fileName.toLowerCase().endsWith(".pdf")) fileName += ".pdf";
-        generatedPdfInstance.save(fileName);
-    });
-
-
-    // --- FEATURE B: PDF TO IMAGE ENGINE ---
-    document.getElementById('pdfConvertBtn').addEventListener('click', async () => {
-        const fileInput = document.getElementById('pdfInput');
-        const sizeLimitMb = parseFloat(document.getElementById('pdfSizeLimit').value);
-        const convertBtn = document.getElementById('pdfConvertBtn');
-        const saveBtn = document.getElementById('pdfSaveBtn');
-
-        if (fileInput.files.length === 0) {
-            updateStatus('pdfStatus', 'Please select a PDF file first.', 'error');
-            return;
-        }
-
-        convertBtn.disabled = true;
-        saveBtn.style.display = 'none';
-        extractedImagesArray = []; 
-        updateStatus('pdfStatus', 'Reading PDF document structure...', 'info');
-
-        try {
-            const file = fileInput.files[0];
-            const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            const totalPages = pdf.numPages;
-            isMultiPagePdf = totalPages > 1;
-
-            const targetMaxBytes = sizeLimitMb * 1024 * 1024 * 0.95;
-            const budgetPerPage = isMultiPagePdf ? (targetMaxBytes / totalPages) : targetMaxBytes;
-
-            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-                updateStatus('pdfStatus', `Rendering sheet ${pageNum} of ${totalPages}...`, 'info');
-                
-                const page = await pdf.getPage(pageNum);
-                const viewport = page.getViewport({ scale: 2.0 });
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-
-                await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-
-                let quality = 0.92;
-                let dataUrl = canvas.toDataURL('image/jpeg', quality);
-                
-                while ((dataUrl.length * 0.75) > budgetPerPage && quality > 0.1) {
-                    quality -= 0.1;
-                    dataUrl = canvas.toDataURL('image/jpeg', quality);
-                }
-                extractedImagesArray.push(dataUrl);
-            }
-
-            saveBtn.style.display = 'block';
-            updateStatus('pdfStatus', `Success! Ready to export ${totalPages} page(s) matching your size constraints.`, 'success');
-        } catch (error) {
-            console.error(error);
-            updateStatus('pdfStatus', 'An error occurred during PDF parsing.', 'error');
-        } finally {
-            convertBtn.disabled = false;
-        }
-    });
-
-    document.getElementById('pdfSaveBtn').addEventListener('click', async () => {
-        if (extractedImagesArray.length === 0) return;
-
-        const defaultName = isMultiPagePdf ? "extracted_pages_package" : "extracted_page";
-        let fileName = prompt("Enter a name for your file/package:", defaultName);
-        if (fileName === null) return;
-        fileName = fileName.trim();
-        if (fileName === "") fileName = defaultName;
-
-        if (!isMultiPagePdf) {
-            if (!fileName.toLowerCase().endsWith(".jpg") && !fileName.toLowerCase().endsWith(".jpeg")) {
-                fileName += ".jpg";
-            }
-            const link = document.createElement('a');
-            link.href = extractedImagesArray[0];
-            link.download = fileName;
-            link.click();
-        } else {
-            updateStatus('pdfStatus', 'Bundling pages into a ZIP file...', 'info');
-            const zip = new JSZip();
-            extractedImagesArray.forEach((dataUrl, index) => {
-                const base64Data = dataUrl.split(',')[1];
-                zip.file(`page_${index + 1}.jpg`, base64Data, { base64: true });
-            });
-
-            if (!fileName.toLowerCase().endsWith(".zip")) fileName += ".zip";
-
-            const content = await zip.generateAsync({ type: "blob" });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(content);
-            link.download = fileName;
-            link.click();
-            updateStatus('pdfStatus', 'ZIP download started!', 'success');
-        }
-    });
-
-
-    // --- GENERAL CONVERSION HELPER UTILITIES ---
+    // --- ASYNC UTILITY ENGINE OPERATIONS ---
     function loadImage(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -458,17 +283,25 @@
         });
     }
 
-    function compressImage(img, maxBytesBudget) {
+    function compressAndProcessImage(img, limitValue, itemFilesCount) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         canvas.width = img.width;
         canvas.height = img.height;
         ctx.drawImage(img, 0, 0);
 
+        // Actual size logic checks out immediately with 100% JPEG parameters
+        if (limitValue === 'actual') {
+            return canvas.toDataURL('image/jpeg', 1.0);
+        }
+
+        const sizeLimitMb = parseFloat(limitValue);
+        const targetMaxBytes = sizeLimitMb * 1024 * 1024 * 0.95; 
+        const bytesPerImageBudget = targetMaxBytes / itemFilesCount;
+
         let quality = 0.92;
         let dataUrl = canvas.toDataURL('image/jpeg', quality);
-        
-        while ((dataUrl.length * 0.75) > maxBytesBudget && quality > 0.1) {
+        while ((dataUrl.length * 0.75) > bytesPerImageBudget && quality > 0.1) {
             quality -= 0.1;
             dataUrl = canvas.toDataURL('image/jpeg', quality);
         }
@@ -476,10 +309,169 @@
     }
 
     function updateStatus(targetId, message, className) {
-        const statusDiv = document.getElementById(targetId);
-        statusDiv.textContent = message;
-        statusDiv.className = `status-box ${className}`;
+        const div = document.getElementById(targetId);
+        div.textContent = message;
+        div.className = `status-box ${className}`;
     }
+
+    // --- IMAGE TO PDF LOGIC (PANEL A) ---
+    document.getElementById('imgConvertBtn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('imgInput');
+        const sizeLimitValue = document.getElementById('imgSizeLimit').value;
+        const convertBtn = document.getElementById('imgConvertBtn');
+        const saveBtn = document.getElementById('imgSaveBtn');
+
+        if (fileInput.files.length === 0) {
+            updateStatus('imgStatus', 'Please select at least one image file.', 'error');
+            return;
+        }
+
+        convertBtn.disabled = true;
+        saveBtn.style.display = 'none';
+        readyPdfInstance = null;
+
+        updateStatus('imgStatus', 'Fitting images to A4 format and adjusting sizes...', 'info');
+
+        try {
+            const files = Array.from(fileInput.files);
+            let pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+            const a4Width = 210;
+            const a4Height = 297;
+            const a4Ratio = a4Width / a4Height;
+
+            for (let i = 0; i < files.length; i++) {
+                if (i > 0) pdf.addPage('a4', 'p');
+                
+                const img = await loadImage(files[i]);
+                const compressedUrl = compressAndProcessImage(img, sizeLimitValue, files.length);
+                
+                let printWidth = a4Width;
+                let printHeight = a4Height;
+                const imgRatio = img.width / img.height;
+
+                if (imgRatio > a4Ratio) {
+                    printHeight = a4Width / imgRatio;
+                } else {
+                    printWidth = a4Height * imgRatio;
+                }
+
+                const xOffset = (a4Width - printWidth) / 2;
+                const yOffset = (a4Height - printHeight) / 2;
+                pdf.addImage(compressedUrl, 'JPEG', xOffset, yOffset, printWidth, printHeight);
+            }
+
+            readyPdfInstance = pdf;
+            const pdfBlob = readyPdfInstance.output('blob');
+            const finalSizeMb = (pdfBlob.size / (1024 * 1024)).toFixed(2);
+            
+            updateStatus('imgStatus', `Success! Compiled into A4 PDF layout (Size: ${finalSizeMb} MB). Ready to export.`, 'success');
+            saveBtn.style.display = 'block';
+        } catch (e) {
+            console.error(e);
+            updateStatus('imgStatus', 'An error occurred during image translation steps.', 'error');
+        } finally {
+            convertBtn.disabled = false;
+        }
+    });
+
+    document.getElementById('imgSaveBtn').addEventListener('click', () => {
+        if (!readyPdfInstance) return;
+        let fileName = prompt("Enter a custom file name for your PDF:", "my_converted_images");
+        if (fileName === null) return; 
+        fileName = fileName.trim();
+        if (fileName === "") fileName = "my_converted_images";
+        if (!fileName.toLowerCase().endsWith(".pdf")) fileName += ".pdf";
+        readyPdfInstance.save(fileName);
+    });
+
+    // --- PDF TO IMAGE LOGIC (PANEL B) ---
+    document.getElementById('pdfConvertBtn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('pdfInput');
+        const sizeLimitValue = document.getElementById('pdfSizeLimit').value;
+        const convertBtn = document.getElementById('pdfConvertBtn');
+        const saveBtn = document.getElementById('pdfSaveBtn');
+
+        if (fileInput.files.length === 0) {
+            updateStatus('pdfStatus', 'Please select a valid PDF source file.', 'error');
+            return;
+        }
+
+        convertBtn.disabled = true;
+        saveBtn.style.display = 'none';
+        readyImagesArray = [];
+
+        updateStatus('pdfStatus', 'Deconstructing PDF structure...', 'info');
+
+        try {
+            const file = fileInput.files[0];
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const totalPages = pdf.numPages;
+            isMultiPageOutput = totalPages > 1;
+
+            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                updateStatus('pdfStatus', `Extracting page ${pageNum} of ${totalPages}...`, 'info');
+                const page = await pdf.getPage(pageNum);
+                const viewport = page.getViewport({ scale: 2.0 });
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+
+                await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+
+                const img = new Image();
+                img.src = canvas.toDataURL('image/jpeg', 1.0);
+                await new Promise(r => img.onload = r);
+
+                const compressedUrl = compressAndProcessImage(img, sizeLimitValue, totalPages);
+                readyImagesArray.push(compressedUrl);
+            }
+
+            updateStatus('pdfStatus', `Success! Extracted ${totalPages} page(s) matching your constraints. Ready to export.`, 'success');
+            saveBtn.style.display = 'block';
+        } catch (e) {
+            console.error(e);
+            updateStatus('pdfStatus', 'An operational failure occurred converting document types.', 'error');
+        } finally {
+            convertBtn.disabled = false;
+        }
+    });
+
+    document.getElementById('pdfSaveBtn').addEventListener('click', async () => {
+        if (readyImagesArray.length === 0) return;
+
+        const defaultName = isMultiPageOutput ? "extracted_pages_package" : "extracted_page";
+        let fileName = prompt(`Enter a custom name for your output (${isMultiPageOutput ? '.zip' : '.jpg'}):`, defaultName);
+        
+        if (fileName === null) return; 
+        fileName = fileName.trim();
+        if (fileName === "") fileName = defaultName;
+
+        if (!isMultiPageOutput) {
+            if (!fileName.toLowerCase().endsWith(".jpg") && !fileName.toLowerCase().endsWith(".jpeg")) fileName += ".jpg";
+            const link = document.createElement('a');
+            link.href = readyImagesArray[0];
+            link.download = fileName;
+            link.click();
+        } else {
+            updateStatus('pdfStatus', 'Building local compressed zip package...', 'info');
+            const zip = new JSZip();
+            readyImagesArray.forEach((dataUrl, idx) => {
+                const b64Data = dataUrl.split(',')[1];
+                zip.file(`page_${idx + 1}.jpg`, b64Data, { base64: true });
+            });
+
+            if (!fileName.toLowerCase().endsWith(".zip")) fileName += ".zip";
+            const content = await zip.generateAsync({ type: "blob" });
+            
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(content);
+            link.download = fileName;
+            link.click();
+            updateStatus('pdfStatus', 'Download successfully triggered!', 'success');
+        }
+    });
 </script>
 
 </body>
