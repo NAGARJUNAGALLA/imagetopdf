@@ -91,7 +91,6 @@
     <h2>Image to A4 PDF Converter</h2>
     
     <div class="form-group">
-        <!-- 'multiple' attribute allows selecting more than one image -->
         <label for="imageInput">Select Multiple Images:</label>
         <input type="file" id="imageInput" accept="image/*" multiple>
     </div>
@@ -135,8 +134,6 @@
         try {
             const files = Array.from(fileInput.files);
             
-            // Force document format explicitly to standard A4 portrait ('a4')
-            // jsPDF handles A4 dimensions in millimeters: 210mm x 297mm
             let pdf = new jsPDF({
                 orientation: 'p',
                 unit: 'mm',
@@ -147,18 +144,15 @@
             const bytesPerImageBudget = targetMaxBytes / files.length;
 
             for (let i = 0; i < files.length; i++) {
-                // Add a new A4 page for subsequent images
                 if (i > 0) pdf.addPage('a4', 'p');
                 
                 const file = files[i];
                 const img = await loadImage(file);
                 const compressedDataUrl = compressImage(img, bytesPerImageBudget);
                 
-                // Exact A4 dimensions in mm
                 const a4Width = 210;
                 const a4Height = 297;
                 
-                // Calculate scale to completely fit full image inside A4 bounds (Letterboxing)
                 const imgRatio = img.width / img.height;
                 const a4Ratio = a4Width / a4Height;
                 
@@ -166,14 +160,11 @@
                 let printHeight = a4Height;
 
                 if (imgRatio > a4Ratio) {
-                    // Image is wider than A4 ratio -> fit to width, scale down height
                     printHeight = a4Width / imgRatio;
                 } else {
-                    // Image is taller than A4 ratio -> fit to height, scale down width
                     printWidth = a4Height * imgRatio;
                 }
 
-                // Mathematical centering offsets on the A4 page
                 const xOffset = (a4Width - printWidth) / 2;
                 const yOffset = (a4Height - printHeight) / 2;
 
@@ -199,9 +190,30 @@
         }
     });
 
+    // Handle "Save As Name" feature
     document.getElementById('saveBtn').addEventListener('click', () => {
         if (generatedPdfInstance) {
-            generatedPdfInstance.save('a4_converted_images.pdf');
+            // Ask user for a custom filename
+            let fileName = prompt("Enter a name for your PDF file:", "my_converted_images");
+            
+            // If user clicks cancel, do nothing
+            if (fileName === null) return; 
+            
+            // Trim whitespace
+            fileName = fileName.trim();
+            
+            // Fallback if they clear the text and click OK
+            if (fileName === "") {
+                fileName = "converted_images";
+            }
+            
+            // Automatically append .pdf extension if they didn't type it
+            if (!fileName.toLowerCase().endsWith(".pdf")) {
+                fileName += ".pdf";
+            }
+            
+            // Trigger download with custom filename
+            generatedPdfInstance.save(fileName);
         }
     });
 
